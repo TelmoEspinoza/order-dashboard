@@ -1,0 +1,471 @@
+<!-- tickets-board.html -->
+<div class="container-fluid py-4 px-4">
+
+  <!-- =========================================================
+       DASHBOARD HEADER (Title + Tagline)
+       ---------------------------------------------------------
+       Bindings used:
+       - No Angular bindings here (pure static UI text)
+       Directives used:
+       - None
+       ========================================================= -->
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+
+    <!-- Heading -->
+    <div>
+      <h2 class="fw-bold mb-1">Support Tickets</h2>
+      <div class="text-secondary">
+        Track, prioritize, and resolve tickets with SLA visibility in one place.
+      </div>
+    </div>
+
+    <!-- =========================================================
+         FILTERS PANEL (Search + Status/Priority/PageSize + Reset)
+         ---------------------------------------------------------
+         Bindings used:
+         - [value]         -> property binding for input/select current values
+         - (input)         -> event binding for live search text updates
+         - (change)        -> event binding when dropdown selection changes
+         - (click)         -> event binding for Clear/Reset actions
+         - [disabled]      -> property binding to disable Clear button conditionally
+         Directives used:
+         - @for            -> structural directive to render dropdown options lists
+         ========================================================= -->
+    <div class="card shadow-sm border-0" style="min-width: 560px;">
+      <div class="card-body p-3">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Filters</div>
+          <div class="small text-secondary">Search & refine results</div>
+        </div>
+
+        <!-- Search -->
+        <div class="input-group input-group-sm mb-3">
+          <span class="input-group-text bg-white">Search</span>
+
+          <input class="form-control"
+                 [value]="searchText"
+                 (input)="onSearchChange(($any($event.target)).value)"
+                 placeholder="Id, subject, customer, email..." />
+
+          <button class="btn btn-outline-secondary"
+                  type="button"
+                  (click)="onSearchChange('')"
+                  [disabled]="!searchText.trim()">
+            Clear
+          </button>
+        </div>
+
+        <!-- Dropdowns row -->
+        <div class="row g-2">
+
+          <!-- Status filter -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small text-secondary mb-1">Status</label>
+
+            <select class="form-select form-select-sm"
+                    [value]="selectedStatus"
+                    (change)="setStatus(($any($event.target)).value)">
+              @for (s of statusOptions; track s) {
+                <option [value]="s">{{ s }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Priority filter -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small text-secondary mb-1">Priority</label>
+
+            <select class="form-select form-select-sm"
+                    [value]="selectedPriority"
+                    (change)="setPriority(($any($event.target)).value)">
+              @for (p of priorityOptions; track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Page size filter -->
+          <div class="col-12 col-md-2">
+            <label class="form-label small text-secondary mb-1">Size</label>
+
+            <select class="form-select form-select-sm"
+                    [value]="pageSize"
+                    (change)="onPageSizeChange(+$any($event.target).value)">
+              @for (ps of pageSizeOptions; track ps) {
+                <option [value]="ps">{{ ps }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Reset button -->
+          <div class="col-12 col-md-2 d-grid">
+            <label class="form-label small text-secondary mb-1">&nbsp;</label>
+            <button class="btn btn-sm btn-primary" type="button" (click)="clearFilters()">
+              Reset
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       TICKETS TABLE (List View)
+       ---------------------------------------------------------
+       Bindings used:
+       - Interpolation {{ }}        -> show ticket data in cells
+       - [title]                    -> tooltip for truncated fields
+       - (click)                    -> open modal on View button
+       - [disabled]                 -> can be used to disable actions (if needed)
+       - [ngClass]                  -> attribute directive to apply Bootstrap classes dynamically
+                                     (row highlight, badges colors, pagination disabled states)
+       Directives used:
+       - @if                        -> structural directive for conditional rendering (empty state, SLA logic)
+       - @else                      -> alternate block when list has data
+       - @for                       -> structural directive to render rows
+       ========================================================= -->
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+
+      @if (pagedTickets.length === 0) {
+        <!-- Empty state (shown when no records match filters) -->
+        <div class="p-4 text-center text-secondary">
+          <div class="fw-semibold mb-1">No tickets found</div>
+          <div class="small">Try different filters or search keywords.</div>
+        </div>
+      } @else {
+
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle mb-0">
+
+            <!-- Table header is static (no Angular bindings) -->
+            <thead class="table-light">
+              <tr class="small text-uppercase text-secondary text-nowrap">
+                <th class="ps-3">Id</th>
+                <th>Subject</th>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>SLA</th>
+                <th>Updated</th>
+                <th class="text-end pe-3">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              @for (t of pagedTickets; track t.id) {
+
+                <!-- Row highlight based on SLA state (NgClass) -->
+                <tr [ngClass]="{ 'table-danger': isBreached(t), 'table-success': isResolved(t) }">
+
+                  <td class="ps-3 py-3 fw-semibold text-nowrap">#{{ t.id }}</td>
+
+                  <td class="py-3 text-nowrap">
+                    <span class="d-inline-block text-truncate"
+                          style="max-width: 520px;"
+                          [title]="t.subject">
+                      {{ t.subject }}
+                    </span>
+                  </td>
+
+                  <td class="py-3 text-nowrap">
+                    <span class="d-inline-block text-truncate"
+                          style="max-width: 240px;"
+                          [title]="t.customer + ' • ' + t.customerEmail">
+                      {{ t.customer }}
+                    </span>
+                  </td>
+
+                  <!-- Badge color based on status (NgClass) -->
+                  <td class="py-3 text-nowrap">
+                    <span class="badge" [ngClass]="statusBadgeClass(t.status)">{{ t.status }}</span>
+                  </td>
+
+                  <!-- Badge color based on priority (NgClass) -->
+                  <td class="py-3 text-nowrap">
+                    <span class="badge" [ngClass]="priorityBadgeClass(t.priority)">{{ t.priority }}</span>
+                  </td>
+
+                  <!-- SLA cell uses @if to show Resolved vs minutes left -->
+                  <td class="py-3 text-nowrap">
+                    <span class="fw-semibold"
+                          [ngClass]="{ 'text-danger': isBreached(t), 'text-success': isResolved(t) }">
+
+                      @if (isResolved(t)) {
+                        Resolved
+                      } @else {
+                        {{ minutesLeft(t) }} min
+                      }
+
+                    </span>
+
+                    @if (isBreached(t)) {
+                      <span class="badge text-bg-danger ms-2">SLA Breached</span>
+                    }
+                  </td>
+
+                  <td class="py-3 text-nowrap">
+                    <span class="small text-secondary">{{ formatDate(t.lastUpdatedAt) }}</span>
+                  </td>
+
+                  <!-- View opens the ticket details modal -->
+                  <td class="py-3 text-end pe-3 text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary" (click)="openTicketModal(t)">
+                      View
+                    </button>
+                  </td>
+
+                </tr>
+              }
+            </tbody>
+
+          </table>
+        </div>
+      }
+    </div>
+
+    <!-- =========================================================
+         PAGINATION FOOTER
+         ---------------------------------------------------------
+         Bindings used:
+         - Interpolation {{ }}        -> show Total and Page numbers
+         - (click)                    -> First/Prev/Next/Last navigation
+         - [disabled]                 -> disable buttons on first/last page
+         - [ngClass]                  -> add 'disabled' class to page-item dynamically
+         Directives used:
+         - None (pagination buttons are always visible)
+         ========================================================= -->
+    <div class="card-footer bg-white border-0 py-3">
+      <div class="row align-items-center g-2">
+
+        <div class="col-12 col-md-4">
+          <div class="small text-secondary">
+            Total: {{ totalItems }} • Page {{ currentPage }} of {{ totalPages }}
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <nav class="d-flex justify-content-center" aria-label="Tickets pagination">
+            <ul class="pagination pagination-sm mb-0">
+
+              <li class="page-item" [ngClass]="{ 'disabled': currentPage === 1 }">
+                <button class="page-link" type="button" (click)="goToFirst()" [disabled]="currentPage === 1">
+                  First
+                </button>
+              </li>
+
+              <li class="page-item" [ngClass]="{ 'disabled': currentPage === 1 }">
+                <button class="page-link" type="button" (click)="goToPrevious()" [disabled]="currentPage === 1">
+                  Previous
+                </button>
+              </li>
+
+              <li class="page-item active" aria-current="page">
+                <span class="page-link">Page {{ currentPage }}</span>
+              </li>
+
+              <li class="page-item" [ngClass]="{ 'disabled': currentPage === totalPages }">
+                <button class="page-link" type="button" (click)="goToNext()" [disabled]="currentPage === totalPages">
+                  Next
+                </button>
+              </li>
+
+              <li class="page-item" [ngClass]="{ 'disabled': currentPage === totalPages }">
+                <button class="page-link" type="button" (click)="goToLast()" [disabled]="currentPage === totalPages">
+                  Last
+                </button>
+              </li>
+
+            </ul>
+          </nav>
+        </div>
+
+        <div class="col-12 col-md-4"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- =========================================================
+       MODAL POPUP (Ticket Details)
+       ---------------------------------------------------------
+       Bindings used:
+       - @if(selectedTicket)         -> show/hide modal
+       - Interpolation {{ }}         -> display selected ticket fields
+       - (click)                    -> close modal (X / Close button / backdrop)
+       - [ngClass]                  -> badge styling and SLA color
+       - [ngStyle]                  -> SLA progress bar width
+       Directives used:
+       - @if                        -> show modal only when selectedTicket is not null
+       - @for                        -> render tags list
+       - NgClass (attribute directive)
+       - NgStyle (attribute directive)
+       ========================================================= -->
+
+  @if (selectedTicket) {
+
+  <div class="modal fade show d-block" tabindex="-1" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+
+      <!-- Strong visual separation using border + shadow -->
+      <div class="modal-content border border-5 border-primary shadow-lg">
+
+        <!-- Slight background so modal doesn't blend with the page -->
+        <div class="modal-header bg-light">
+
+          <div class="w-100">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+
+              <div>
+                <h5 class="modal-title mb-2">Ticket #{{ selectedTicket.id }}</h5>
+                <div class="small text-danger">{{ selectedTicket.subject }}</div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2">
+                <span class="badge" [ngClass]="statusBadgeClass(selectedTicket.status)">
+                  {{ selectedTicket.status }}
+                </span>
+
+                <span class="badge" [ngClass]="priorityBadgeClass(selectedTicket.priority)">
+                  {{ selectedTicket.priority }}
+                </span>
+
+                @if (isBreached(selectedTicket)) {
+                  <span class="badge text-bg-danger">SLA Breached</span>
+                }
+              </div>
+
+            </div>
+          </div>
+
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeTicketModal()"></button>
+        </div>
+
+        <div class="modal-body bg-white">
+          <div class="row g-3">
+
+            <!-- ===================== Customer ===================== -->
+            <div class="col-12 col-md-6">
+              <div class="border rounded shadow-sm h-100">
+
+                <div class="px-3 py-2 border-bottom bg-success-subtle text-success fw-semibold rounded-top">
+                  Customer
+                </div>
+
+                <div class="p-3">
+                  <div class="small"><span class="text-secondary">Name:</span> {{ selectedTicket.customer }}</div>
+                  <div class="small"><span class="text-secondary">Email:</span> {{ selectedTicket.customerEmail }}</div>
+                  <div class="small"><span class="text-secondary">Phone:</span> {{ selectedTicket.customerPhone }}</div>
+                  <div class="small mt-2">
+                    <span class="badge bg-light text-dark border">{{ selectedTicket.customerTier }}</span>
+                    <span class="badge bg-light text-dark border ms-1">{{ selectedTicket.impact }}</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ===================== Ticket Info ===================== -->
+            <div class="col-12 col-md-6">
+              <div class="border rounded shadow-sm h-100">
+
+                <div class="px-3 py-2 border-bottom bg-success-subtle text-success fw-semibold rounded-top">
+                  Ticket Info
+                </div>
+
+                <div class="p-3">
+                  <div class="small"><span class="text-secondary">Category:</span> {{ selectedTicket.category }}</div>
+                  <div class="small"><span class="text-secondary">Channel:</span> {{ selectedTicket.chanel }}</div>
+
+                  <div class="small mt-2">
+                    @for (tag of selectedTicket.tags; track tag) {
+                      <span class="badge bg-body-secondary text-dark border me-1 mb-1">{{ tag }}</span>
+                    }
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ===================== Assignment ===================== -->
+            <div class="col-12 col-md-6">
+              <div class="border rounded shadow-sm h-100">
+
+                <div class="px-3 py-2 border-bottom bg-success-subtle text-success fw-semibold rounded-top">
+                  Assignment
+                </div>
+
+                <div class="p-3">
+                  <div class="small"><span class="text-secondary">Team:</span> {{ selectedTicket.assignedTeam }}</div>
+                  <div class="small"><span class="text-secondary">Assignee:</span> {{ selectedTicket.assignee }}</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ===================== SLA & Dates ===================== -->
+            <div class="col-12 col-md-6">
+              <div class="border rounded shadow-sm h-100">
+
+                <div class="px-3 py-2 border-bottom bg-success-subtle text-success fw-semibold rounded-top">
+                  SLA & Dates
+                </div>
+
+                <div class="p-3">
+
+                  <div class="small">
+                    <span class="text-secondary">SLA:</span>
+                    <span class="fw-semibold"
+                          [ngClass]="{ 'text-danger': isBreached(selectedTicket), 'text-success': isResolved(selectedTicket) }">
+                      @if (isResolved(selectedTicket)) {
+                        Resolved
+                      } @else {
+                        {{ minutesLeft(selectedTicket) }} min
+                      }
+                    </span>
+                  </div>
+
+                  <div class="small"><span class="text-secondary">Created:</span> {{ formatDate(selectedTicket.createdAt) }}</div>
+                  <div class="small"><span class="text-secondary">Updated:</span> {{ formatDate(selectedTicket.lastUpdatedAt) }}</div>
+                  <div class="small"><span class="text-secondary">Due:</span> {{ formatDate(selectedTicket.dueAt) }}</div>
+
+                  @if (!isResolved(selectedTicket)) {
+                    <div class="mt-3">
+                      <div class="d-flex justify-content-between small text-secondary mb-1">
+                        <span>SLA Progress</span>
+                        <span>{{ slaPercent(selectedTicket) }}%</span>
+                      </div>
+
+                      <div class="progress" style="height: 8px;">
+                        <div class="progress-bar"
+                             [ngClass]="progressBarClass(selectedTicket)"
+                             [ngStyle]="{ width: slaPercent(selectedTicket) + '%' }"></div>
+                      </div>
+                    </div>
+                  }
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer bg-light">
+          <button class="btn btn-outline-secondary" type="button" (click)="closeTicketModal()">
+            Close
+          </button>
+          <button class="btn btn-primary" type="button" [disabled]="isResolved(selectedTicket)">
+            Assign
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+}
+
+</div>
